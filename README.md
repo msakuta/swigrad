@@ -5,7 +5,7 @@ Autograd in swift
 ## Overview
 
 We implemented autograd in [Rust](https://github.com/msakuta/rustograd), [Zig](https://github.com/msakuta/zigrad) and [Scala](https://github.com/msakuta/scagrad).
-Now it's time for swift.
+Inspired by [Tsoding](https://www.youtube.com/watch?v=LTP5c4NqA8k&ab_channel=TsodingDaily), now it's time for swift.
 
 There are 2 files in this repo
 
