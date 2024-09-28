@@ -13,19 +13,23 @@ enum TapeValue {
     case Div(Int, Int)
 }
 
-struct Tape {
+class Tape {
     var tape: [TapeNode] = []
 
-    mutating func addConst(name: String, _ val: Double) -> Int {
+    var count: Int {
+        get { tape.count }
+    }
+
+    func addConst(name: String, _ val: Double) -> TapeTerm {
         let ret = tape.count
         tape.append(TapeNode(
             name: name,
             value: TapeValue.Value(val)
         ))
-        return ret
+        return TapeTerm(ret, self)
     }
 
-    mutating func add(_ lhs: Int, _ rhs: Int) -> Int {
+    func add_add(_ lhs: Int, _ rhs: Int) -> Int {
         let ret = tape.count
         tape.append(TapeNode(
             name: tape[lhs].name + " + " + tape[rhs].name,
@@ -34,7 +38,16 @@ struct Tape {
         return ret
     }
 
-    mutating func mul(_ lhs: Int, _ rhs: Int) -> Int {
+    func add_sub(_ lhs: Int, _ rhs: Int) -> Int {
+        let ret = tape.count
+        tape.append(TapeNode(
+            name: tape[lhs].name + " - " + tape[rhs].name,
+            value: TapeValue.Sub(lhs, rhs)
+        ))
+        return ret
+    }
+
+    func add_mul(_ lhs: Int, _ rhs: Int) -> Int {
         let ret = tape.count
         tape.append(TapeNode(
             name: tape[lhs].name + " * " + tape[rhs].name,
@@ -43,44 +56,109 @@ struct Tape {
         return ret
     }
 
-    func eval(_ idx: Int) -> Double {
-        let node = tape[idx]
+    func add_div(_ lhs: Int, _ rhs: Int) -> Int {
+        let ret = tape.count
+        tape.append(TapeNode(
+            name: tape[lhs].name + " / " + tape[rhs].name,
+            value: TapeValue.Div(lhs, rhs)
+        ))
+        return ret
+    }
+
+    func eval_int(_ term: Int) -> Double {
+        let node = tape[term]
         switch node.value {
             case let .Value(v): return v
-            case let .Add(lhs, rhs): return eval(lhs) + eval(rhs)
-            case let .Sub(lhs, rhs): return eval(lhs) - eval(rhs)
-            case let .Mul(lhs, rhs): return eval(lhs) * eval(rhs)
-            case let .Div(lhs, rhs): return eval(lhs) / eval(rhs)
+            case let .Add(lhs, rhs): return eval_int(lhs) + eval_int(rhs)
+            case let .Sub(lhs, rhs): return eval_int(lhs) - eval_int(rhs)
+            case let .Mul(lhs, rhs): return eval_int(lhs) * eval_int(rhs)
+            case let .Div(lhs, rhs): return eval_int(lhs) / eval_int(rhs)
         }
     }
 
-    func derive(_ idx: Int, _ wrt: Int) -> Double {
-        let node = tape[idx]
+    func derive_int(_ term: Int, _ wrt: Int) -> Double {
+        let node = tape[term]
         switch node.value {
-            case let .Value(v): if idx == wrt {
+            case let .Value(v): if term == wrt {
                 return 1
             } else {
                 return 0
             }
-            case let .Add(lhs, rhs): return derive(lhs, wrt) + derive(rhs, wrt)
-            case let .Sub(lhs, rhs): return derive(lhs, wrt) - derive(rhs, wrt)
-            case let .Mul(lhs, rhs): return eval(lhs) * derive(rhs, wrt) + derive(lhs, wrt) * eval(rhs)
+            case let .Add(lhs, rhs): return derive_int(lhs, wrt) + derive_int(rhs, wrt)
+            case let .Sub(lhs, rhs): return derive_int(lhs, wrt) - derive_int(rhs, wrt)
+            case let .Mul(lhs, rhs): return eval_int(lhs) * derive_int(rhs, wrt) + derive_int(lhs, wrt) * eval_int(rhs)
             case let .Div(lhs, rhs):
-                let lhsv = eval(lhs)
-                let rhsv = eval(rhs)
-                return derive(lhs, wrt) / rhsv - lhsv * derive(rhs, wrt) / rhsv / rhsv
+                let lhsv = eval_int(lhs)
+                let rhsv = eval_int(rhs)
+                return derive_int(lhs, wrt) / rhsv - lhsv * derive_int(rhs, wrt) / rhsv / rhsv
         }
     }
+}
+
+struct TapeTerm {
+    var idx: Int
+    var tape: Tape
+    init(_ idx: Int, _ tape: Tape) {
+        self.idx = idx
+        self.tape = tape
+    }
+    func eval() -> Double { return  tape.eval_int(idx) }
+    func derive(_ wrt: TapeTerm) -> Double { tape.derive_int(idx, wrt.idx) }
+    // func backward() = {
+    //     tape.clear_grad()
+    //     tape.backward_int(idx)
+    // }
+    // func gen_graph(wrt: TapeTerm): Option[TapeTerm] = tape.gen_graph(idx, wrt.idx).map({ x => TapeTerm(x, tape) })
+    // func set(v: Double) = tape.terms(idx).set(v)
+    // func grad(): Option[Double] = tape.terms(idx).grad
+    // func +(other: TapeTerm) = TapeTerm(tape.add_add(idx, other.idx), tape)
+    // func -(other: TapeTerm) = TapeTerm(tape.add_sub(idx, other.idx), tape)
+    // func *(other: TapeTerm) = TapeTerm(tape.add_mul(idx, other.idx), tape)
+    // func /(other: TapeTerm) = TapeTerm(tape.add_div(idx, other.idx), tape)
+    // func unary_- = TapeTerm(tape.add_neg(idx), tape)
+
+    // func apply(name: String, f: (Double) => Double, g: (Double) => Double, gg: (Int, Int, Int) => Option[Int]) = {
+    //     TapeTerm(tape.add_unary(idx, name, f, g, gg), tape)
+    // }
+}
+
+
+func + (lhs: TapeTerm, _ rhs: TapeTerm) -> TapeTerm {
+    // TODO: assert the terms belong to the same tape
+    // assert(ObjectIdentifier(lhs.tape) == ObjectIdentifier(rhs.tape))
+    let tape = lhs.tape
+    return TapeTerm(tape.add_add(lhs.idx, rhs.idx), tape)
+}
+
+func - (lhs: TapeTerm, _ rhs: TapeTerm) -> TapeTerm {
+    // TODO: assert the terms belong to the same tape
+    // assert(ObjectIdentifier(lhs.tape) == ObjectIdentifier(rhs.tape))
+    let tape = lhs.tape
+    return TapeTerm(tape.add_sub(lhs.idx, rhs.idx), tape)
+}
+
+func * (lhs: TapeTerm, _ rhs: TapeTerm) -> TapeTerm {
+    // TODO: assert the terms belong to the same tape
+    // assert(ObjectIdentifier(lhs.tape) == ObjectIdentifier(rhs.tape))
+    let tape = lhs.tape
+    return TapeTerm(tape.add_mul(lhs.idx, rhs.idx), tape)
+}
+
+func / (lhs: TapeTerm, _ rhs: TapeTerm) -> TapeTerm {
+    // TODO: assert the terms belong to the same tape
+    // assert(ObjectIdentifier(lhs.tape) == ObjectIdentifier(rhs.tape))
+    let tape = lhs.tape
+    return TapeTerm(tape.add_div(lhs.idx, rhs.idx), tape)
 }
 
 var tape = Tape()
 
 let a = tape.addConst(name: "a", 1)
 let b = tape.addConst(name: "b", 2)
-let ab = tape.add(a, b)
+let ab = a + b
 let c = tape.addConst(name: "c", 42)
-let abc = tape.mul(ab, c)
+let abc = ab * c
 
 print(tape)
-print(tape.eval(ab))
-print(tape.derive(abc, a))
+print(ab.eval())
+print(abc.derive(a))
