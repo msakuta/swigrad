@@ -350,6 +350,21 @@ func demo_gauss() {
     }
 }
 
+func demo_sin() {
+    var tape = Tape()
+    let x = tape.value(name: "x", 0)
+    let x2 = x * x
+    func derive_sin(_ arg: Int, _ out: Int, _ der: Int) -> Int? {
+        return tape.add_unary("sin", arg, f: sin, g: cos, gg: derive_sin)
+    }
+    let sin_x2 = x2.apply("sin", f: sin, g: cos, gg: derive_sin)
+    for i in -50...50 {
+        let xval = Double(i) / 10.0
+        x.set(xval)
+        print("[\(xval), \(sin_x2.eval()), \(sin_x2.derive(x))],")
+    }
+}
+
 func demo_higher_order() {
     var tape = Tape()
 
@@ -373,4 +388,4 @@ func demo_higher_order() {
     }
 }
 
-demo_higher_order()
+demo_sin()
