@@ -11,6 +11,7 @@ enum TapeValue {
     case Sub(Int, Int)
     case Mul(Int, Int)
     case Div(Int, Int)
+    case Neg(Int)
 }
 
 class Tape {
@@ -73,6 +74,7 @@ class Tape {
             case let .Sub(lhs, rhs): return eval_int(lhs) - eval_int(rhs)
             case let .Mul(lhs, rhs): return eval_int(lhs) * eval_int(rhs)
             case let .Div(lhs, rhs): return eval_int(lhs) / eval_int(rhs)
+            case let .Neg(term): return -eval_int(term)
         }
     }
 
@@ -91,6 +93,64 @@ class Tape {
                 let lhsv = eval_int(lhs)
                 let rhsv = eval_int(rhs)
                 return derive_int(lhs, wrt) / rhsv - lhsv * derive_int(rhs, wrt) / rhsv / rhsv
+            case let .Neg(term): return -derive_int(term, wrt)
+        }
+    }
+
+    func clear_grad() {
+        for i in 0..<tape.count {
+            tape[i].grad = nil
+        }
+    }
+
+    func backward_int(_ term: Int) {
+        tape[term].grad = 1
+        for i in (1..<tape.count).reversed() {
+            backward_node(i)
+        }
+    }
+
+    // Since swift doesn't allow simultaneous access to an array,
+    // we cannot use `inout TapeNode` as the argument, because it will
+    // borrow the reference to the whole tape for the entirety of this function,
+    // making us unable to update another node.
+    // Unfortunately it will be a cryptic runtime error, not a compile time one,
+    // which is why I leave the comment here.
+    // We need to access an element of the array like `tape[idx].grad`
+    // every time.
+    // Probably TapeNode is supposed to be a class in swift philosophy, but I
+    // want it be a flat array without indirection.
+    func backward_node(_ idx: Int) {
+        switch tape[idx].value {
+            case .Value:
+                break
+            case let .Add(lhs, rhs):
+                let grad = tape[idx].grad
+                if let grad {
+                    tape[lhs].grad = grad
+                    tape[rhs].grad = grad
+                }
+            case let .Sub(lhs, rhs):
+                if let grad = tape[idx].grad {
+                    tape[lhs].grad = grad
+                    tape[rhs].grad = -grad
+                }
+            case let .Mul(lhs, rhs):
+                if let grad = tape[idx].grad {
+                    tape[lhs].grad = grad * eval_int(rhs)
+                    tape[rhs].grad = grad * eval_int(lhs)
+                }
+            case let .Div(lhs, rhs):
+                if let grad = tape[idx].grad {
+                    let lhsv = eval_int(lhs)
+                    let rhsv = eval_int(rhs)
+                    tape[lhs].grad = grad / rhsv
+                    tape[rhs].grad = -lhsv * grad / rhsv / rhsv
+                }
+            case let .Neg(term):
+                if let grad = tape[idx].grad {
+                    tape[term].grad = -grad
+                }
         }
     }
 }
@@ -104,10 +164,10 @@ struct TapeTerm {
     }
     func eval() -> Double { return  tape.eval_int(idx) }
     func derive(_ wrt: TapeTerm) -> Double { tape.derive_int(idx, wrt.idx) }
-    // func backward() = {
-    //     tape.clear_grad()
-    //     tape.backward_int(idx)
-    // }
+    func backward() {
+        tape.clear_grad()
+        tape.backward_int(idx)
+    }
     // func gen_graph(wrt: TapeTerm): Option[TapeTerm] = tape.gen_graph(idx, wrt.idx).map({ x => TapeTerm(x, tape) })
     // func set(v: Double) = tape.terms(idx).set(v)
     // func grad(): Option[Double] = tape.terms(idx).grad
@@ -155,6 +215,11 @@ let ab = a + b
 let c = tape.value(name: "c", 42)
 let abc = ab * c
 
-print(tape)
 print(ab.eval())
 print(abc.derive(a))
+
+abc.backward()
+
+for term in tape.tape {
+    print(term)
+}
