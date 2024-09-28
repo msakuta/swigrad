@@ -14,7 +14,7 @@ enum TapeValue {
     case Mul(Int, Int)
     case Div(Int, Int)
     case Neg(Int)
-    case UnaryFn(Int, (Double) -> Double, (Double) -> Double)
+    case UnaryFn(Int, (Double) -> Double, (Double) -> Double, (Int, Int, Int) -> Int?)
 }
 
 class Tape {
@@ -78,11 +78,15 @@ class Tape {
         return ret
     }
 
-    func add_unary(_ name: String, _ term: Int, f: @escaping (Double) -> Double, g: @escaping (Double) -> Double, gg: (Int, Int, Int) -> Int?) -> Int {
+    func add_unary(_ name: String, _ term: Int,
+        f: @escaping (Double) -> Double,
+        g: @escaping (Double) -> Double,
+        gg: @escaping (Int, Int, Int) -> Int?) -> Int
+    {
         let ret = tape.count
         tape.append(TapeNode(
             name: name + "(" + tape[term].name + ")",
-            value: TapeValue.UnaryFn(term, f, g)
+            value: TapeValue.UnaryFn(term, f, g, gg)
         ))
         return ret
     }
@@ -96,7 +100,7 @@ class Tape {
             case let .Mul(lhs, rhs): return eval_int(lhs) * eval_int(rhs)
             case let .Div(lhs, rhs): return eval_int(lhs) / eval_int(rhs)
             case let .Neg(term): return -eval_int(term)
-            case let .UnaryFn(term, f, _): return f(eval_int(term))
+            case let .UnaryFn(term, f, _, _): return f(eval_int(term))
         }
     }
 
@@ -116,7 +120,7 @@ class Tape {
                 let rhsv = eval_int(rhs)
                 return derive_int(lhs, wrt) / rhsv - lhsv * derive_int(rhs, wrt) / rhsv / rhsv
             case let .Neg(term): return -derive_int(term, wrt)
-            case let .UnaryFn(term, _, g): return derive_int(term, wrt) * g(eval_int(term))
+            case let .UnaryFn(term, _, g, _): return derive_int(term, wrt) * g(eval_int(term))
         }
     }
 
@@ -174,7 +178,7 @@ class Tape {
             if let grad = tape[idx].grad {
                 tape[term].grad = -grad
             }
-        case let .UnaryFn(term, _, g):
+        case let .UnaryFn(term, _, g, _):
             if let grad = tape[idx].grad {
                 tape[term].grad = g(grad)
             }
@@ -225,10 +229,9 @@ class Tape {
             break
         case let .Neg(term):
             return gen_graph(term, wrt).map({ (node) in add_neg(node) })
-        case let .UnaryFn(term, f, _):
+        case let .UnaryFn(term, _, _, gg):
             let derived = gen_graph(term, wrt)
-            return derived
-            // derived.flatMap({ derived => gg(term, idx, derived)})
+            return derived.flatMap({ (derived) in gg(term, idx, derived) })
     }
     return nil
   }
@@ -262,7 +265,11 @@ struct TapeTerm {
     }
     // func grad(): Option[Double] = tape.terms(idx).grad
 
-    func apply(_ name: String, f: @escaping (Double) -> Double, g: @escaping (Double) -> Double, gg: (Int, Int, Int) -> Int?) -> TapeTerm {
+    func apply(_ name: String,
+        f: @escaping (Double) -> Double,
+        g: @escaping (Double) -> Double,
+        gg: @escaping (Int, Int, Int) -> Int?) -> TapeTerm
+    {
         return TapeTerm(tape.add_unary(name, idx, f: f, g: g, gg: gg), tape)
     }
 }
@@ -321,22 +328,49 @@ func derive_exp(_ tape: Tape, _ arg: Int, _ out: Int, _ der: Int) -> Int? {
     tape.add_mul(out, der)
 }
 
-var tape = Tape()
+func demo_gauss() {
+    var tape = Tape()
 
-let x = tape.value(name: "x", 0)
-let sigma = tape.value(name: "sigma", 1)
-let arg = -(x * x / (sigma * sigma))
-let term = arg.apply("exp", f: exp, g: exp, gg: { (arg, out, der) in derive_exp(tape, arg, out, der) })
+    let x = tape.value(name: "x", 0)
+    let sigma = tape.value(name: "sigma", 1)
+    let arg = -(x * x / (sigma * sigma))
+    let term = arg.apply("exp", f: exp, g: exp, gg: { (arg, out, der) in derive_exp(tape, arg, out, der) })
 
-let exp_grad = term.gen_graph(x)
+    let exp_grad = term.gen_graph(x)
 
-print("Generated derived term:")
-for term in tape.tape {
-    print(term)
+    print("Generated derived term:")
+    for term in tape.tape {
+        print(term)
+    }
+
+    for ix in -20...20 {
+        let xval = Double(ix) / 10.0
+        x.set(xval)
+        print("[\(xval), \(term.eval()), \(term.derive(x))],")
+    }
 }
 
-for ix in -20...20 {
-    let xval = Double(ix) / 10.0
-    x.set(xval)
-    print("[\(xval), \(term.eval()), \(term.derive(x))],")
+func demo_higher_order() {
+    var tape = Tape()
+
+    let x = tape.value(name: "x", 0)
+    let sigma = tape.value(name: "sigma", 1)
+    let arg = -(x * x / (sigma * sigma))
+    let term = arg.apply("exp", f: exp, g: exp, gg: { (arg, out, der) in derive_exp(tape, arg, out, der) })
+
+    let term_grad = term.gen_graph(x)!
+    let term_grad2 = term_grad.gen_graph(x)!
+
+    print("Generated derived term:")
+    for term in tape.tape {
+        print(term)
+    }
+
+    for ix in -20...20 {
+        let xval = Double(ix) / 5.0
+        x.set(xval)
+        print("[\(xval), \(term.eval()), \(term_grad.eval()), \(term_grad2.eval())],")
+    }
 }
+
+demo_higher_order()
