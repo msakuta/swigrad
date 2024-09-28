@@ -20,7 +20,7 @@ class Tape {
         get { tape.count }
     }
 
-    func addConst(name: String, _ val: Double) -> TapeTerm {
+    func value(name: String, _ val: Double) -> TapeTerm {
         let ret = tape.count
         tape.append(TapeNode(
             name: name,
@@ -124,39 +124,35 @@ struct TapeTerm {
 
 
 func + (lhs: TapeTerm, _ rhs: TapeTerm) -> TapeTerm {
-    // TODO: assert the terms belong to the same tape
-    // assert(ObjectIdentifier(lhs.tape) == ObjectIdentifier(rhs.tape))
+    assert(ObjectIdentifier(lhs.tape) == ObjectIdentifier(rhs.tape))
     let tape = lhs.tape
     return TapeTerm(tape.add_add(lhs.idx, rhs.idx), tape)
 }
 
 func - (lhs: TapeTerm, _ rhs: TapeTerm) -> TapeTerm {
-    // TODO: assert the terms belong to the same tape
-    // assert(ObjectIdentifier(lhs.tape) == ObjectIdentifier(rhs.tape))
+    assert(ObjectIdentifier(lhs.tape) == ObjectIdentifier(rhs.tape))
     let tape = lhs.tape
     return TapeTerm(tape.add_sub(lhs.idx, rhs.idx), tape)
 }
 
 func * (lhs: TapeTerm, _ rhs: TapeTerm) -> TapeTerm {
-    // TODO: assert the terms belong to the same tape
-    // assert(ObjectIdentifier(lhs.tape) == ObjectIdentifier(rhs.tape))
+    assert(ObjectIdentifier(lhs.tape) == ObjectIdentifier(rhs.tape))
     let tape = lhs.tape
     return TapeTerm(tape.add_mul(lhs.idx, rhs.idx), tape)
 }
 
 func / (lhs: TapeTerm, _ rhs: TapeTerm) -> TapeTerm {
-    // TODO: assert the terms belong to the same tape
-    // assert(ObjectIdentifier(lhs.tape) == ObjectIdentifier(rhs.tape))
+    assert(ObjectIdentifier(lhs.tape) == ObjectIdentifier(rhs.tape))
     let tape = lhs.tape
     return TapeTerm(tape.add_div(lhs.idx, rhs.idx), tape)
 }
 
 var tape = Tape()
 
-let a = tape.addConst(name: "a", 1)
-let b = tape.addConst(name: "b", 2)
+let a = tape.value(name: "a", 1)
+let b = tape.value(name: "b", 2)
 let ab = a + b
-let c = tape.addConst(name: "c", 42)
+let c = tape.value(name: "c", 42)
 let abc = ab * c
 
 print(tape)
