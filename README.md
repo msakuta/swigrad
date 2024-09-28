@@ -15,4 +15,8 @@ Now it's time for swift.
 
 * Gaussian and its higher order derivatives
 
-![Higher order differentiation](images/swigrad.png)
+![Higher order differentiation](images/swigrad-gauss.png)
+
+* Graph visualization with graphviz
+
+![Graphviz](images/swigrad-graph.png)

@@ -18,15 +18,15 @@ enum TapeValue {
 }
 
 class Tape {
-    var tape: [TapeNode] = []
+    var terms: [TapeNode] = []
 
     var count: Int {
-        get { tape.count }
+        get { terms.count }
     }
 
     func value(name: String, _ val: Double) -> TapeTerm {
-        let ret = tape.count
-        tape.append(TapeNode(
+        let ret = terms.count
+        terms.append(TapeNode(
             name: name,
             value: TapeValue.Value(val)
         ))
@@ -34,45 +34,45 @@ class Tape {
     }
 
     func add_add(_ lhs: Int, _ rhs: Int) -> Int {
-        let ret = tape.count
-        tape.append(TapeNode(
-            name: tape[lhs].name + " + " + tape[rhs].name,
+        let ret = terms.count
+        terms.append(TapeNode(
+            name: terms[lhs].name + " + " + terms[rhs].name,
             value: TapeValue.Add(lhs, rhs)
         ))
         return ret
     }
 
     func add_sub(_ lhs: Int, _ rhs: Int) -> Int {
-        let ret = tape.count
-        tape.append(TapeNode(
-            name: tape[lhs].name + " - " + tape[rhs].name,
+        let ret = terms.count
+        terms.append(TapeNode(
+            name: terms[lhs].name + " - " + terms[rhs].name,
             value: TapeValue.Sub(lhs, rhs)
         ))
         return ret
     }
 
     func add_mul(_ lhs: Int, _ rhs: Int) -> Int {
-        let ret = tape.count
-        tape.append(TapeNode(
-            name: tape[lhs].name + " * " + tape[rhs].name,
+        let ret = terms.count
+        terms.append(TapeNode(
+            name: terms[lhs].name + " * " + terms[rhs].name,
             value: TapeValue.Mul(lhs, rhs)
         ))
         return ret
     }
 
     func add_div(_ lhs: Int, _ rhs: Int) -> Int {
-        let ret = tape.count
-        tape.append(TapeNode(
-            name: tape[lhs].name + " / " + tape[rhs].name,
+        let ret = terms.count
+        terms.append(TapeNode(
+            name: terms[lhs].name + " / " + terms[rhs].name,
             value: TapeValue.Div(lhs, rhs)
         ))
         return ret
     }
 
     func add_neg(_ term: Int) -> Int {
-        let ret = tape.count
-        tape.append(TapeNode(
-            name: "-" + tape[term].name,
+        let ret = terms.count
+        terms.append(TapeNode(
+            name: "-" + terms[term].name,
             value: TapeValue.Neg(term)
         ))
         return ret
@@ -83,16 +83,16 @@ class Tape {
         g: @escaping (Double) -> Double,
         gg: @escaping (Int, Int, Int) -> Int?) -> Int
     {
-        let ret = tape.count
-        tape.append(TapeNode(
-            name: name + "(" + tape[term].name + ")",
+        let ret = terms.count
+        terms.append(TapeNode(
+            name: name + "(" + terms[term].name + ")",
             value: TapeValue.UnaryFn(term, f, g, gg)
         ))
         return ret
     }
 
     func eval_int(_ term: Int) -> Double {
-        let node = tape[term]
+        let node = terms[term]
         switch node.value {
             case let .Value(v): return v
             case let .Add(lhs, rhs): return eval_int(lhs) + eval_int(rhs)
@@ -105,9 +105,9 @@ class Tape {
     }
 
     func derive_int(_ term: Int, _ wrt: Int) -> Double {
-        let node = tape[term]
+        let node = terms[term]
         switch node.value {
-            case let .Value(v): if term == wrt {
+            case .Value: if term == wrt {
                 return 1
             } else {
                 return 0
@@ -125,68 +125,68 @@ class Tape {
     }
 
     func clear_grad() {
-        for i in 0..<tape.count {
-            tape[i].grad = nil
+        for i in 0..<terms.count {
+            terms[i].grad = nil
         }
     }
 
     func backward_int(_ term: Int) {
-        tape[term].grad = 1
-        for i in (1..<tape.count).reversed() {
+        terms[term].grad = 1
+        for i in (1..<terms.count).reversed() {
             backward_node(i)
         }
     }
 
     // Since swift doesn't allow simultaneous access to an array,
     // we cannot use `inout TapeNode` as the argument, because it will
-    // borrow the reference to the whole tape for the entirety of this function,
+    // borrow the reference to the whole terms for the entirety of this function,
     // making us unable to update another node.
     // Unfortunately it will be a cryptic runtime error, not a compile time one,
     // which is why I leave the comment here.
-    // We need to access an element of the array like `tape[idx].grad`
+    // We need to access an element of the array like `terms[idx].grad`
     // every time.
     // Probably TapeNode is supposed to be a class in swift philosophy, but I
     // want it be a flat array without indirection.
     func backward_node(_ idx: Int) {
-        switch tape[idx].value {
+        switch terms[idx].value {
         case .Value:
             break
         case let .Add(lhs, rhs):
-            let grad = tape[idx].grad
+            let grad = terms[idx].grad
             if let grad {
-                tape[lhs].grad = grad
-                tape[rhs].grad = grad
+                terms[lhs].grad = grad
+                terms[rhs].grad = grad
             }
         case let .Sub(lhs, rhs):
-            if let grad = tape[idx].grad {
-                tape[lhs].grad = grad
-                tape[rhs].grad = -grad
+            if let grad = terms[idx].grad {
+                terms[lhs].grad = grad
+                terms[rhs].grad = -grad
             }
         case let .Mul(lhs, rhs):
-            if let grad = tape[idx].grad {
-                tape[lhs].grad = grad * eval_int(rhs)
-                tape[rhs].grad = grad * eval_int(lhs)
+            if let grad = terms[idx].grad {
+                terms[lhs].grad = grad * eval_int(rhs)
+                terms[rhs].grad = grad * eval_int(lhs)
             }
         case let .Div(lhs, rhs):
-            if let grad = tape[idx].grad {
+            if let grad = terms[idx].grad {
                 let lhsv = eval_int(lhs)
                 let rhsv = eval_int(rhs)
-                tape[lhs].grad = grad / rhsv
-                tape[rhs].grad = -lhsv * grad / rhsv / rhsv
+                terms[lhs].grad = grad / rhsv
+                terms[rhs].grad = -lhsv * grad / rhsv / rhsv
             }
         case let .Neg(term):
-            if let grad = tape[idx].grad {
-                tape[term].grad = -grad
+            if let grad = terms[idx].grad {
+                terms[term].grad = -grad
             }
         case let .UnaryFn(term, _, g, _):
-            if let grad = tape[idx].grad {
-                tape[term].grad = g(grad)
+            if let grad = terms[idx].grad {
+                terms[term].grad = g(grad)
             }
         }
     }
 
     func gen_graph(_ idx: Int, _ wrt: Int) -> Optional<Int> {
-        switch tape[idx].value {
+        switch terms[idx].value {
         case .Value: if idx == wrt { return 1 } else { return nil }
         case let .Add(lhs, rhs):
             switch (gen_graph(lhs, wrt), gen_graph(rhs, wrt)) {
@@ -202,7 +202,6 @@ class Tape {
             case (lhs, rhs?): return add_sub(lhs, rhs)
             case _: return nil
             }
-            break
         case let .Mul(lhs, rhs):
             switch (gen_graph(lhs, wrt), gen_graph(rhs, wrt)) {
             case let (dlhs?, nil): return add_mul(dlhs, rhs)
@@ -214,11 +213,10 @@ class Tape {
                 return node
             case _: return nil
             }
-            break
         case let .Div(lhs, rhs):
             switch (gen_graph(lhs, wrt), gen_graph(rhs, wrt)) {
-            case let (dlhs?, None): return add_div(dlhs, rhs)
-            case let (None, drhs?):
+            case let (dlhs?, nil): return add_div(dlhs, rhs)
+            case let (nil, drhs?):
                 return add_neg(add_div(add_div(add_mul(lhs, drhs), rhs), rhs))
             case let (dlhs?, drhs?):
                 let plhs = add_div(dlhs, rhs)
@@ -226,14 +224,33 @@ class Tape {
                 return add_sub(plhs, prhs)
             case _: return nil
             }
-            break
         case let .Neg(term):
             return gen_graph(term, wrt).map({ (node) in add_neg(node) })
         case let .UnaryFn(term, _, _, gg):
             let derived = gen_graph(term, wrt)
             return derived.flatMap({ (derived) in gg(term, idx, derived) })
+        }
     }
-    return nil
+
+    func dot() -> String {
+        var ret = "digraph D {\n\tnode[style=filled fillcolor=\"#7fff7f\"];\n"
+        for (i, node) in terms.enumerated() {
+            ret += "a\(i) [label=\"\(node.name)\", shape=rect];\n"
+        }
+        for (i, node) in terms.enumerated() {
+            switch node.value {
+            case .Value:
+                break
+            case let .Add(lhs, rhs): ret += "a\(lhs) -> a\(i);\na\(rhs) -> a\(i);\n"
+            case let .Sub(lhs, rhs): ret += "a\(lhs) -> a\(i);\na\(rhs) -> a\(i);\n"
+            case let .Mul(lhs, rhs): ret += "a\(lhs) -> a\(i);\na\(rhs) -> a\(i);\n"
+            case let .Div(lhs, rhs): ret += "a\(lhs) -> a\(i);\na\(rhs) -> a\(i);\n"
+            case let .Neg(term): ret += "a\(term) -> a\(i);\n"
+            case let .UnaryFn(term, _, _, _): ret += "a\(term) -> a\(i);\n"
+            }
+        }
+        ret += "}\n"
+        return ret
   }
 }
 
@@ -258,9 +275,9 @@ struct TapeTerm {
         }
     }
     func set(_ val: Double) {
-        tape.tape[idx].data = val
-        if case let TapeValue.Value(target) = tape.tape[idx].value {
-            tape.tape[idx].value = TapeValue.Value(val)
+        tape.terms[idx].data = val
+        if case TapeValue.Value = tape.terms[idx].value {
+            tape.terms[idx].value = TapeValue.Value(val)
         }
     }
     // func grad(): Option[Double] = tape.terms(idx).grad
@@ -305,7 +322,7 @@ prefix func - (term: TapeTerm) -> TapeTerm {
 }
 
 func demo_simple() {
-    var tape = Tape()
+    let tape = Tape()
 
     let a = tape.value(name: "a", 1)
     let b = tape.value(name: "b", 2)
@@ -319,7 +336,7 @@ func demo_simple() {
     abc.backward()
 
     print("Back-propagated:")
-    for term in tape.tape {
+    for term in tape.terms {
         print(term)
     }
 }
@@ -329,17 +346,15 @@ func derive_exp(_ tape: Tape, _ arg: Int, _ out: Int, _ der: Int) -> Int? {
 }
 
 func demo_gauss() {
-    var tape = Tape()
+    let tape = Tape()
 
     let x = tape.value(name: "x", 0)
     let sigma = tape.value(name: "sigma", 1)
     let arg = -(x * x / (sigma * sigma))
     let term = arg.apply("exp", f: exp, g: exp, gg: { (arg, out, der) in derive_exp(tape, arg, out, der) })
 
-    let exp_grad = term.gen_graph(x)
-
     print("Generated derived term:")
-    for term in tape.tape {
+    for term in tape.terms {
         print(term)
     }
 
@@ -351,7 +366,7 @@ func demo_gauss() {
 }
 
 func demo_sin() {
-    var tape = Tape()
+    let tape = Tape()
     let x = tape.value(name: "x", 0)
     let x2 = x * x
     func derive_sin(_ arg: Int, _ out: Int, _ der: Int) -> Int? {
@@ -366,7 +381,7 @@ func demo_sin() {
 }
 
 func demo_higher_order() {
-    var tape = Tape()
+    let tape = Tape()
 
     let x = tape.value(name: "x", 0)
     let sigma = tape.value(name: "sigma", 1)
@@ -377,7 +392,7 @@ func demo_higher_order() {
     let term_grad2 = term_grad.gen_graph(x)!
 
     print("Generated derived term:")
-    for term in tape.tape {
+    for term in tape.terms {
         print(term)
     }
 
@@ -386,6 +401,13 @@ func demo_higher_order() {
         x.set(xval)
         print("[\(xval), \(term.eval()), \(term_grad.eval()), \(term_grad2.eval())],")
     }
+
+    let text = tape.dot()
+    do {
+        try text.write(toFile: "graph.dot", atomically: true, encoding: .utf8)
+    } catch {
+        print("Failed to write to graph.dot")
+    }
 }
 
-demo_sin()
+demo_higher_order()
