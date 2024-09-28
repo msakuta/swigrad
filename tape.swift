@@ -66,6 +66,15 @@ class Tape {
         return ret
     }
 
+    func add_neg(_ term: Int) -> Int {
+        let ret = tape.count
+        tape.append(TapeNode(
+            name: "-" + tape[term].name,
+            value: TapeValue.Neg(term)
+        ))
+        return ret
+    }
+
     func eval_int(_ term: Int) -> Double {
         let node = tape[term]
         switch node.value {
@@ -153,6 +162,59 @@ class Tape {
                 }
         }
     }
+
+    func gen_graph(_ idx: Int, _ wrt: Int) -> Optional<Int> {
+        switch tape[idx].value {
+        case .Value: if idx == wrt { return 1 } else { return nil }
+        case let .Add(lhs, rhs):
+            switch (gen_graph(lhs, wrt), gen_graph(rhs, wrt)) {
+            case let (lhs?, nil): return lhs
+            case let (nil, rhs?): return rhs
+            case let (lhs?, rhs?): return add_add(lhs, rhs)
+            case _: return nil
+            }
+        case let .Sub(lhs, rhs):
+            switch (gen_graph(lhs, wrt), gen_graph(rhs, wrt)) {
+            case (lhs?, nil): return lhs
+            case (nil, rhs?): return add_neg(rhs)
+            case (lhs, rhs?): return add_sub(lhs, rhs)
+            case _: return nil
+            }
+            break
+        case let .Mul(lhs, rhs):
+            switch (gen_graph(lhs, wrt), gen_graph(rhs, wrt)) {
+            case let (dlhs?, nil): return add_mul(dlhs, rhs)
+            case let (nil, drhs?): return add_mul(lhs, drhs)
+            case let (dlhs?, drhs?):
+                let plhs = add_mul(dlhs, rhs)
+                let prhs = add_mul(lhs, drhs)
+                let node = add_add(plhs, prhs)
+                return node
+            case _: return nil
+            }
+            break
+        case let .Div(lhs, rhs):
+            switch (gen_graph(lhs, wrt), gen_graph(rhs, wrt)) {
+            case let (dlhs?, None): return add_div(dlhs, rhs)
+            case let (None, drhs?):
+                return add_neg(add_div(add_div(add_mul(lhs, drhs), rhs), rhs))
+            case let (dlhs?, drhs?):
+                let plhs = add_div(dlhs, rhs)
+                let prhs = add_div(add_div(add_mul(lhs, drhs), rhs), rhs)
+                return add_sub(plhs, prhs)
+            case _: return nil
+            }
+            break
+        case let .Neg(term):
+            break
+            // gen_graph(term, wrt).map({ node => add_neg(node) })
+        // case let .UnaryFn(term, _a, _b, gg): {
+        //     let derived = gen_graph(term, wrt)
+        //     // derived.flatMap({ derived => gg(term, idx, derived)})
+        // }
+    }
+    return nil
+  }
 }
 
 struct TapeTerm {
@@ -168,7 +230,13 @@ struct TapeTerm {
         tape.clear_grad()
         tape.backward_int(idx)
     }
-    // func gen_graph(wrt: TapeTerm): Option[TapeTerm] = tape.gen_graph(idx, wrt.idx).map({ x => TapeTerm(x, tape) })
+    func gen_graph(_ wrt: TapeTerm) -> TapeTerm? {
+        if let x = tape.gen_graph(idx, wrt.idx) {
+            return TapeTerm(x, tape)
+        } else {
+            return nil
+        }
+    }
     // func set(v: Double) = tape.terms(idx).set(v)
     // func grad(): Option[Double] = tape.terms(idx).grad
     // func +(other: TapeTerm) = TapeTerm(tape.add_add(idx, other.idx), tape)
@@ -220,6 +288,14 @@ print(abc.derive(a))
 
 abc.backward()
 
+print("Back-propagated:")
+for term in tape.tape {
+    print(term)
+}
+
+let abc_grad = abc.gen_graph(a)
+
+print("Generated derived term:")
 for term in tape.tape {
     print(term)
 }
